@@ -152,6 +152,7 @@ def check_vps_health() -> bool:
             timeout=5,
             verify=True
         )
+        print(response.url)
         if response.status_code == 200:
             log("✅ VPS доступен")
             return True
