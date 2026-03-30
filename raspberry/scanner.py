@@ -54,7 +54,7 @@ def scan_network() -> list:
     try:
         # Шаг 1: Ping-сканирование через nmap для заполнения ARP-таблицы
         subprocess.run(
-            ['nmap', '-sn', SUBNET],
+            ['/usr/bin/nmap', '-sn', SUBNET],
             capture_output=True,
             text=True,
             timeout=60
@@ -62,7 +62,7 @@ def scan_network() -> list:
         
         # Шаг 2: Чтение ARP-таблицы
         result = subprocess.run(
-            ['ip', 'neigh', 'show'],
+            ['/usr/sbin/ip', 'neigh', 'show'],
             capture_output=True,
             text=True,
             timeout=10
@@ -150,7 +150,7 @@ def check_vps_health() -> bool:
         response = requests.get(
             f'{VPS_URL}/api/v1/health',
             timeout=5,
-            verify=True
+            verify=True'
         )
         if response.status_code == 200:
             log("✅ VPS доступен")
@@ -189,6 +189,7 @@ def main():
         # Отправка на VPS
         if macs or iteration % 10 == 0:  # Отправляем даже пустой результат каждые 10 итераций
             send_to_vps(macs)
+            log(f"Отправляем мак-адреса..")
         
         # Ожидание до следующего сканирования
         log(f"😴 Сон на {SCAN_INTERVAL} секунд...")
