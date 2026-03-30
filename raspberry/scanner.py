@@ -150,7 +150,7 @@ def check_vps_health() -> bool:
         response = requests.get(
             f'{VPS_URL}/api/v1/health',
             timeout=5,
-            verify=True'
+            verify=True
         )
         if response.status_code == 200:
             log("✅ VPS доступен")
