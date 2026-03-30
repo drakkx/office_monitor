@@ -149,16 +149,29 @@ def get_current_office_status() -> Dict:
     conn.close()
     
     if not row:
-        return {'present': [], 'present_count': 0, 'is_empty': True, 'last_visit': None}
+        return {
+            'present': [],
+            'present_count': 0,
+            'guests_count': 0,  # ✅ Добавлено
+            'is_empty': True,
+            'last_visit': None,
+            'last_update': None,
+            'timestamp': datetime.now().isoformat()
+        }
     
     current_macs = set(json.loads(row['macs_json']))
     known_macs = load_known_macs()
+    total_known_macs = get_all_known_macs(known_macs)  # ✅ Новая функция
     
     present = []
+    guests_count = 0
+    
     for mac in current_macs:
         name = get_person_by_mac(mac, known_macs)
         if name and name not in present:
             present.append(name)
+        elif mac not in total_known_macs:
+            guests_count += 1  # ✅ Считаем гостей
     
     # Получаем последнее посещение
     last_visit = get_last_empty_time()
@@ -166,6 +179,7 @@ def get_current_office_status() -> Dict:
     return {
         'present': present,
         'present_count': len(present),
+        'guests_count': guests_count,  # ✅ Добавлено
         'is_empty': len(present) == 0,
         'last_visit': last_visit,
         'last_update': row['timestamp'],
@@ -279,3 +293,10 @@ def get_person_by_mac(mac: str, known_macs: Dict) -> Optional[str]:
         if mac in mac_list and name != 'Devices':
             return name
     return None
+
+def get_all_known_macs(known_macs: Dict) -> set:
+    """Возвращает множество всех известных MAC-адресов (включая Devices)."""
+    all_macs = set()
+    for name, mac_list in known_macs.items():
+        all_macs.update(mac_list)
+    return all_macs

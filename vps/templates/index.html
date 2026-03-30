@@ -14,13 +14,13 @@
             <span id="current-time">{{ now.strftime('%H:%M:%S') }}</span>
         </div>
         <div class="stats">
-            <span class="present-count">👥 В офисе: <strong id="present-count">{{ status.present|length }}</strong></span>
-            <span class="guests-count" id="guests-section">
-                {% if status.guests_count > 0 %}
-                | Гости: {{ status.guests_count }}
-                {% endif %}
-            </span>
-        </div>
+    <span class="present-count">👥 В офисе: <strong id="present-count">{{ status.present_count }}</strong></span>
+    <span class="guests-count" id="guests-section">
+        {% if status.guests_count is defined and status.guests_count > 0 %}
+        | Гости: {{ status.guests_count }}
+        {% endif %}
+    </span>
+</div>
         <div class="last-visit" id="last-visit-section" 
              style="display: {% if status.is_empty %}block{% else %}none{% endif %}">
             🚪 Последний раз в офисе: <strong>{{ status.last_visit or 'неизвестно' }}</strong>

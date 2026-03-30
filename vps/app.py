@@ -48,7 +48,7 @@ def receive_scan_data():
     """
     data = request.get_json()
     
-    if not data or 'macs' not in 
+    if not data or 'macs' not in data:
         abort(400, description="Отсутствует поле 'macs'")
     
     macs = [mac.upper() for mac in data.get('macs', [])]
