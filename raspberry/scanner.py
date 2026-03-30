@@ -106,7 +106,8 @@ def send_to_vps(macs: list):
     
     headers = {
         'X-API-Key': API_KEY,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.1.2 Safari/605.1.15'
     }
     
     try:
@@ -153,7 +154,6 @@ def check_vps_health() -> bool:
             timeout=5,
             verify=True
         )
-        print(response.url)
         if response.status_code == 200:
             log("✅ VPS доступен")
             return True
