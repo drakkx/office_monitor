@@ -7,10 +7,68 @@ from functools import wraps
 import os
 from dotenv import load_dotenv
 import database as db
+from flask import session, redirect, url_for, request, render_template
+from functools import wraps
+import ipaddress
+import os
 
 load_dotenv()
 
 app = Flask(__name__)
+
+app.secret_key = os.getenv('SECRET_KEY', os.urandom(32).hex())
+
+# Пользователи (в продакшене — БД с хешами!)
+USERS = {
+    'admin': os.getenv('ADMIN_PASSWORD', 'admin123')
+}
+
+# Разрешённые IP сети (без auth)
+LOCAL_NETWORKS = ['192.168.31.0/24', '10.0.0.0/8']
+
+def is_local_ip():
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    try:
+        for network in LOCAL_NETWORKS:
+            if ipaddress.ip_address(client_ip) in ipaddress.ip_network(network):
+                return True
+    except ValueError:
+        pass
+    return False
+
+def require_login(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Локальная сеть — доступ без пароля
+        if is_local_ip():
+            return f(*args, **kwargs)
+        
+        # Извне — требуется авторизация
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if username in USERS and USERS[username] == password:
+            session['logged_in'] = True
+            session['username'] = username
+            session.permanent = True  # Для remember-me
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error='Неверный логин/пароль')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 # 🔐 API Key для аутентификации Raspberry Pi
 API_KEY = os.getenv('SCANNER_API_KEY')
@@ -82,6 +140,7 @@ def health_check():
 # ============================================================
 
 @app.route('/')
+@require_login
 def index():
     """Главная страница с визуализацией."""
     current_status = db.get_current_office_status()
