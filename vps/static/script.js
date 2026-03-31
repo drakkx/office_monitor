@@ -1,114 +1,184 @@
 // static/script.js
 
-// Обновление времени в реальном времени
-function updateTime() {
-    const now = new Date();
-    document.getElementById('current-date').textContent = 
-        now.toLocaleDateString('ru-RU', {day: '2-digit', month: '2-digit', year: 'numeric'});
-    document.getElementById('current-time').textContent = 
-        now.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+// 🆕 Получаем количество столов из конфигурации
+function getDesksCount() {
+    return window.DESKS_CONFIG?.total || 
+           document.getElementById('desks-container')?.dataset.total || 
+           4;  // Fallback
 }
 
-// Обновление статуса сотрудников через API
-async function updateStatus() {
-    try {
-        const response = await fetch('/api/status');
+// 🆕 Ждём появления всех динамических столов
+async function waitForDesks(timeout = 5000) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
         
-        // Проверка успешности запроса
+        const check = () => {
+            const total = getDesksCount();
+            const desks = [];
+            
+            for (let i = 1; i <= total; i++) {
+                const desk = document.getElementById(`desk-${i}`);
+                if (desk) desks.push(desk);
+            }
+            
+            if (desks.length === total && total > 0) {
+                console.log(`✅ Все ${total} столов готовы`);
+                resolve();
+            } else if (Date.now() - startTime > timeout) {
+                console.warn(`⏱️ Таймаут: найдено ${desks.length} из ${total} столов`);
+                resolve();  // Продолжаем даже если не все найдены
+            } else {
+                setTimeout(check, 100);
+            }
+        };
+        
+        check();
+    });
+}
+
+// 🆕 Обновлённая updateStatus для динамических столов
+async function updateStatus() {
+    const totalDesks = getDesksCount();
+    
+    // Проверка готовности
+    const firstDesk = document.getElementById('desk-1');
+    if (!firstDesk && totalDesks > 0) {
+        console.warn('⚠️ Столы ещё не в DOM, пропускаем обновление');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/status', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        });
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log(`✅ Получены данные: ${data.present_count}/${data.total_desks} сотрудников`);
         
-        // ✅ Проверка: существует ли data.desks
-        if (data.desks && Array.isArray(data.desks)) {
-            // Обновляем столы
+        // 🆕 Обновление динамических столов
+        if (Array.isArray(data.desks)) {
             data.desks.forEach(desk => {
                 const element = document.getElementById(`desk-${desk.id}`);
                 if (element) {
-                    element.className = `desk ${desk.is_present ? 'present' : 'absent'}`;
+                    const wasPresent = element.classList.contains('present');
+                    const isPresent = desk.is_present;
                     
+                    // Обновляем классы
+                    element.classList.toggle('present', isPresent);
+                    element.classList.toggle('absent', !isPresent);
+                    
+                    // Обновляем текст
                     const statusEl = element.querySelector('.desk-status');
                     if (statusEl) {
-                        statusEl.textContent = desk.is_present 
-                            ? '✓ В офисе' 
-                            : '○ Нет на месте';
+                        statusEl.textContent = isPresent ? '✓ В офисе' : '○ Нет на месте';
                     }
+                    
+                    // Анимация при изменении
+                    if (wasPresent !== isPresent) {
+                        element.style.transition = 'transform 0.3s ease';
+                        element.style.transform = 'scale(1.02)';
+                        setTimeout(() => {
+                            element.style.transform = '';
+                        }, 300);
+                    }
+                } else {
+                    console.warn(`⚠️ Стол #${desk.id} не найден в DOM`);
                 }
             });
-        } else {
-            console.warn('⚠️ data.desks отсутствует или не является массивом');
         }
         
-        // Обновляем статистику
-        const presentCountEl = document.getElementById('present-count');
-        if (presentCountEl && data.present_count !== undefined) {
-            presentCountEl.textContent = data.present_count;
-        }
+        // Обновление статистики
+        updateStats(data);
         
-        // Гости
-        const guestsSection = document.getElementById('guests-section');
-        if (guestsSection && data.guests_count !== undefined) {
-            if (data.guests_count > 0) {
-                guestsSection.innerHTML = `| Гости: ${data.guests_count}`;
-                guestsSection.style.display = 'inline';
-            } else {
-                guestsSection.style.display = 'none';
-            }
+        // Уведомления
+        if (typeof checkNotificationEvents === 'function') {
+            await checkNotificationEvents();
         }
-        
-        // Последний визит
-        const lastVisitSection = document.getElementById('last-visit-section');
-        if (lastVisitSection && data.is_empty !== undefined) {
-            if (data.is_empty) {
-                lastVisitSection.style.display = 'block';
-                if (data.last_visit) {
-                    const strongEl = lastVisitSection.querySelector('strong');
-                    if (strongEl) strongEl.textContent = data.last_visit;
-                }
-            } else {
-                lastVisitSection.style.display = 'none';
-            }
-        }
-        
-        // Время обновления
-        console.log(`✅ Статус обновлён: ${new Date().toLocaleTimeString()}`);
         
     } catch (error) {
-        console.error('❌ Ошибка обновления статуса:', error);
-        
-        // Визуальное уведомление об ошибке
-        const errorToast = document.createElement('div');
-        errorToast.className = 'toast toast-error';
-        errorToast.innerHTML = `
-            <span>⚠️ Не удалось обновить статус</span>
-            <button onclick="this.parentElement.remove()">×</button>
-        `;
-        
-        let container = document.getElementById('toast-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'toast-container';
-            document.body.appendChild(container);
+        console.error('❌ Ошибка обновления:', error);
+        showTemporaryError('Не удалось обновить статус');
+    }
+}
+
+// 🆕 Обновление статистики
+function updateStats(data) {
+    // Количество присутствующих
+    const presentEl = document.getElementById('present-count');
+    if (presentEl) {
+        const total = data.total_desks || getDesksCount();
+        presentEl.textContent = `${data.present_count || 0} / ${total}`;
+    }
+    
+    // Гости
+    const guestsEl = document.getElementById('guests-section') || 
+                     document.querySelector('.guests-count');
+    if (guestsEl && data.guests_count !== undefined) {
+        if (data.guests_count > 0) {
+            guestsEl.textContent = `| Гости: ${data.guests_count}`;
+            guestsEl.style.display = 'inline';
+        } else {
+            guestsEl.style.display = 'none';
         }
-        container.appendChild(errorToast);
-        
-        setTimeout(() => errorToast.remove(), 5000);
+    }
+    
+    // Последний визит
+    const lastVisitEl = document.getElementById('last-visit-section') ||
+                        document.querySelector('.last-visit');
+    if (lastVisitEl && data.is_empty !== undefined) {
+        if (data.is_empty) {
+            lastVisitEl.style.display = 'block';
+            if (data.last_visit) {
+                const strong = lastVisitEl.querySelector('strong');
+                if (strong) strong.textContent = data.last_visit;
+            }
+        } else {
+            lastVisitEl.style.display = 'none';
+        }
     }
 }
 
-// Получение внешнего IP
-async function fetchExternalIP() {
-    try {
-        const response = await fetch('/api/ip');
-        const data = await response.json();
-        document.getElementById('external-ip').textContent = `IP: ${data.ip}`;
-    } catch {
-        document.getElementById('external-ip').textContent = 'IP: ошибка';
+// Инициализация
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('📄 DOM загружен, столов:', getDesksCount());
+    
+    updateTime();
+    fetchExternalIP();
+    
+    if (typeof initNotifications === 'function') {
+        initNotifications();
     }
-}
-
-// Экспорт для глобального доступа
-window.updateStatus = updateStatus;
-window.fetchExternalIP = fetchExternalIP;
+    
+    // Ждём готовности столов
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await waitForDesks();
+    
+    pageReady = true;
+    await updateStatus();
+    
+    // Автообновление
+    setInterval(() => {
+        if (pageReady) updateStatus();
+    }, 30000);
+    
+    // Кнопка обновить
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            updateStatus();
+        });
+    }
+    
+    console.log('✅ Инициализация завершена');
+});

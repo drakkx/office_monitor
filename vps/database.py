@@ -449,23 +449,56 @@ def get_current_office_status() -> Dict:
         'timestamp': datetime.now().isoformat()
     }
 
+def get_desks_config() -> List[Dict]:
+    """
+    Генерирует конфигурацию столов из macs_dump.json.
+    Возвращает список: [{'id': 1, 'name': 'Alexey', 'macs': [...]}, ...]
+    """
+    known_macs = load_known_macs()
+    
+    desks = []
+    desk_id = 1
+    
+    # Сортируем имена для стабильного порядка
+    for name in sorted(known_macs.keys()):
+        # Пропускаем служебные записи
+        if name in ['Devices', 'devices', 'DEVICES']:
+            continue
+        if name.startswith('Guest_') or name.startswith('guest_'):
+            continue
+        if '_' in name and not name.replace('_', '').isalnum():
+            continue
+            
+        desks.append({
+            'id': desk_id,
+            'name': name,
+            'macs': known_macs[name]
+        })
+        desk_id += 1
+    
+    return desks
+
 def get_desks_status() -> List[Dict]:
-    """Возвращает статус для каждого стола."""
+    """
+    Возвращает статус для каждого динамического стола.
+    """
+    desks_config = get_desks_config()
     current_status = get_current_office_status()
     present_names = set(current_status['present'])
     
-    # Конфигурация столов (можно вынести в БД)
-    desks_config = [
-        {'id': 1, 'name': 'Леха'},
-        {'id': 2, 'name': 'Кирилл'},
-        {'id': 3, 'name': 'Коля'},
-        {'id': 4, 'name': 'Макс'},
-    ]
-    
     return [
-        {**desk, 'is_present': desk['name'] in present_names}
+        {
+            'id': desk['id'],
+            'name': desk['name'],
+            'is_present': desk['name'] in present_names,
+            'macs': desk['macs']  # Можно использовать для отладки
+        }
         for desk in desks_config
     ]
+
+def get_total_desks_count() -> int:
+    """Возвращает общее количество столов."""
+    return len(get_desks_config())
 
 def get_events(since: datetime = None) -> List[Dict]:
     """Получает события за период."""

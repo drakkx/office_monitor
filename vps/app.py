@@ -225,23 +225,42 @@ def index():
     """Главная страница."""
     current_status = db.get_current_office_status()
     desks = db.get_desks_status()
+    desks_config = db.get_desks_config()
     
     return render_template('index.html',
-                         desks=desks,           # ✅ Для первичного рендера
-                         status={**current_status, 'desks': desks},  # ✅ Для JS
+                         desks=desks,
+                         desks_config=desks_config,  # ✅ Для JS
+                         status={
+                             **current_status,
+                             'desks': desks,
+                             'total_desks': len(desks)
+                         },
                          now=datetime.now())
+
 
 @app.route('/api/status')
 def api_status():
-    """API для AJAX-обновления страницы."""
+    """API для AJAX-обновления."""
     current_status = db.get_current_office_status()
-    desks = db.get_desks_status()  # ✅ Получаем статус столов
+    desks = db.get_desks_status()
     
     return jsonify({
-        **current_status,  # Распаковываем все поля статуса
-        'desks': desks,    # ✅ Добавляем столы
+        **current_status,
+        'desks': desks,
+        'total_desks': len(desks),
         'timestamp': datetime.now().isoformat()
     })
+
+@app.route('/api/desks')
+def api_desks():
+    """API для получения конфигурации столов."""
+    desks = db.get_desks_status()
+    return jsonify({
+        'desks': desks,
+        'total': len(desks),
+        'config': db.get_desks_config()
+    })
+
 # ============================================================
 # API для Raspberry Pi
 # ============================================================

@@ -159,6 +159,78 @@ body {
     font-style: italic;
     opacity: 0.8;
 }
+/* Сообщение при отсутствии столов */
+.no-desks-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem;
+    background: #f8f9fa;
+    border-radius: 16px;
+    font-size: 1.2rem;
+    color: #666;
+}
+
+/* MAC-адреса на столе */
+.desk-macs {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.8);
+    margin-top: 0.5rem;
+    padding: 0.2rem 0.5rem;
+    background: rgba(0,0,0,0.1);
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.desk.absent .desk-macs {
+    color: rgba(255,255,255,0.6);
+}
+
+/* Адаптивная сетка под количество столов */
+.desks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2rem;
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    flex: 1;
+}
+
+/* Для 1-2 столов */
+.desks-grid[data-total="1"] {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+}
+
+.desks-grid[data-total="2"] {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 700px;
+}
+
+/* Для 3-6 столов */
+.desks-grid[data-total="3"],
+.desks-grid[data-total="4"],
+.desks-grid[data-total="5"],
+.desks-grid[data-total="6"] {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+/* Для большого количества */
+.desks-grid[data-total="7"],
+.desks-grid[data-total="8"],
+.desks-grid[data-total="9"],
+.desks-grid[data-total="10"] {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.desks-grid[data-total]::before {
+    content: attr(data-total) " столов";
+    position: absolute;
+    top: -30px;
+    right: 0;
+    font-size: 0.85rem;
+    color: #999;
+}
 
 /* Адаптив */
 @media (max-width: 768px) {

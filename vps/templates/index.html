@@ -1,62 +1,79 @@
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏢 Монитор офиса</title>
+    <title>🏢 OfficeStatus — {{ desks|length }} столов</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <!-- Шапка с информацией -->
+    <!-- Шапка -->
     <header class="office-header">
         <div class="datetime">
             <span id="current-date">{{ now.strftime('%d.%m.%Y') }}</span>
             <span id="current-time">{{ now.strftime('%H:%M:%S') }}</span>
         </div>
         <div class="stats">
-    <span class="present-count">👥 В офисе: <strong id="present-count">{{ status.present_count }}</strong></span>
-    <span class="guests-count" id="guests-section">
-        {% if status.guests_count is defined and status.guests_count > 0 %}
-        | Гости: {{ status.guests_count }}
-        {% endif %}
-    </span>
-</div>
-        <div class="last-visit" id="last-visit-section" 
-             style="display: {% if status.is_empty %}block{% else %}none{% endif %}">
-            🚪 Последний раз в офисе: <strong>{{ status.last_visit or 'неизвестно' }}</strong>
+            <span class="present-count">
+                👥 В офисе: <strong id="present-count">{{ status.present|length }}</strong> / {{ desks|length }}
+            </span>
+            {% if status.guests_count > 0 %}
+            <span class="guests-count">| Гости: {{ status.guests_count }}</span>
+            {% endif %}
         </div>
+        {% if status.is_empty %}
+        <div class="last-visit">
+            🚪 Последний раз: <strong>{{ status.last_visit or 'неизвестно' }}</strong>
+        </div>
+        {% endif %}
     </header>
 
-    <!-- Сетка столов -->
-    <main class="desks-grid">
+    <!-- Динамическая сетка столов -->
+    <main class="desks-grid" id="desks-container" data-total="{{ desks|length }}">
         {% for desk in desks %}
-        <div class="desk {% if desk.is_present %}present{% else %}absent{% endif %}" id="desk-{{ desk.id }}">
+        <div class="desk {{ 'present' if desk.is_present else 'absent' }}" 
+             id="desk-{{ desk.id }}"
+             data-desk-id="{{ desk.id }}"
+             data-desk-name="{{ desk.name }}"
+             data-is-present="{{ desk.is_present|lower }}">
             <div class="desk-top"></div>
             <div class="desk-name">{{ desk.name }}</div>
             <div class="desk-status">
                 {{ '✓ В офисе' if desk.is_present else '○ Нет на месте' }}
             </div>
             <div class="desk-indicator"></div>
+            {% if desk.macs %}
+            <div class="desk-macs" title="MAC: {{ desk.macs|join(', ') }}">
+                📡 {{ desk.macs|length }} устр.
+            </div>
+            {% endif %}
         </div>
         {% endfor %}
+        
+        {% if desks|length == 0 %}
+        <div class="no-desks-message">
+            😕 Столы не найдены в macs_dump.json
+        </div>
+        {% endif %}
     </main>
 
-    <!-- Футер с доп. информацией -->
+    <!-- Футер -->
     <footer class="office-footer">
         <button id="refresh-btn" onclick="updateStatus()">🔄 Обновить</button>
         <span id="external-ip">IP: загрузка...</span>
-        <span class="auto-update">Автообновление: <strong>30 сек</strong></span>
+        <span class="auto-update">Авто: 30 сек</span>
     </footer>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script>
-        // Инициализация
-        document.addEventListener('DOMContentLoaded', () => {
-            updateTime();
-            setInterval(updateTime, 1000);
-            setInterval(updateStatus, 30000); // Автообновление каждые 30 сек
-            fetchExternalIP();
-        });
+        // 🆕 Передаём конфигурацию столов из Flask в JS
+        window.DESKS_CONFIG = {
+            total: {{ desks|length }},
+            desks: {{ desks|tojson }}
+        };
+        
+        console.log('📊 Конфигурация столов:', window.DESKS_CONFIG);
     </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
