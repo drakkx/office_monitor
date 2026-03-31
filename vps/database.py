@@ -57,6 +57,7 @@ def init_database():
             scanner_id TEXT NOT NULL,
             timestamp TEXT NOT NULL,
             macs_json TEXT NOT NULL,
+            url TEXT NOT NULL
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -320,16 +321,16 @@ def cleanup_expired_sessions():
     conn.commit()
     conn.close()
 
-def save_scan_result(scanner_id: str, macs: List[str], timestamp: str):
+def save_scan_result(scanner_id: str, macs: List[str], timestamp: str, ip):
     """Сохраняет результат сканирования от Raspberry Pi."""
     conn = get_connection()
     cursor = conn.cursor()
     
     # Сохраняем скан
     cursor.execute('''
-        INSERT INTO scans (scanner_id, timestamp, macs_json)
-        VALUES (?, ?, ?)
-    ''', (scanner_id, timestamp, json.dumps(macs)))
+        INSERT INTO scans (scanner_id, timestamp, macs_json, url)
+        VALUES (?, ?, ?, ?)
+    ''', (scanner_id, timestamp, json.dumps(macs), ip))
     
     # Обновляем последнее состояние
     cursor.execute('''

@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 import database as db
 from auth import login_required, admin_required, is_local_ip, generate_csrf_token, validate_csrf_token
 from functools import wraps
-
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 load_dotenv()
 
 app = Flask(__name__)
@@ -268,8 +269,6 @@ def api_desks():
 @app.route('/api/v1/scan', methods=['POST'])
 def receive_scan_data():
     """Получает данные от Raspberry Pi."""
-    from flask_limiter import Limiter
-    from flask_limiter.util import get_remote_address
     
     key = request.headers.get('X-API-Key')
     if not key or key != API_KEY:
@@ -283,7 +282,7 @@ def receive_scan_data():
     timestamp = data.get('timestamp', datetime.now().isoformat())
     scanner_id = data.get('scanner_id', 'raspberry-1')
     
-    db.save_scan_result(scanner_id, macs, timestamp)
+    db.save_scan_result(scanner_id, macs, timestamp, ip)
     events = db.detect_events(macs)
     
     return jsonify({
