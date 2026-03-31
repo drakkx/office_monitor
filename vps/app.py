@@ -274,7 +274,7 @@ def receive_scan_data():
     key = request.headers.get('X-API-Key')
     if not key or key != API_KEY:
         abort(403, description="Неверный API ключ")
-    
+    ip = request.url
     data = request.get_json()
     if not data or 'macs' not in data:
         abort(400, description="Отсутствует поле 'macs'")
@@ -290,7 +290,8 @@ def receive_scan_data():
         'status': 'ok',
         'received_macs': len(macs),
         'events_detected': len(events),
-        'server_time': datetime.now().isoformat()
+        'server_time': datetime.now().isoformat(),
+        'ip': ip
     })
 
 @app.route('/api/v1/health')
