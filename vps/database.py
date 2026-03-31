@@ -57,7 +57,7 @@ def init_database():
             scanner_id TEXT NOT NULL,
             timestamp TEXT NOT NULL,
             macs_json TEXT NOT NULL,
-            url TEXT NOT NULL
+            url TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
