@@ -15,9 +15,11 @@
             <span id="current-time">{{ now.strftime('%H:%M:%S') }}</span>
         </div>
         <div class="stats">
-            <span class="present-count">
-                👥 В офисе: <strong id="present-count">{{ status.present|length }}</strong> / {{ desks|length }}
-            </span>
+            <span class="present-count" id="present-count-wrapper">
+    👥 В офисе: 
+    <strong id="present-count">{{ status.present|length }}</strong> 
+    / <span id="total-desks">{{ desks|length }}</span>
+</span>
             {% if status.guests_count > 0 %}
             <span class="guests-count">| Гости: {{ status.guests_count }}</span>
             {% endif %}
