@@ -85,7 +85,20 @@ def login():
             flash('❌ Неверное имя пользователя или пароль', 'error')
     
     return render_template('login.html', next=next_page)
-
+@app.route('/api/ip')
+def get_external_ip():
+    """Возвращает внешний IP сервера."""
+    try:
+        import requests
+        # Получаем внешний IP через сторонний сервис
+        ip = requests.get('https://ifconfig.me/ip', timeout=5).text.strip()
+        return jsonify({'ip': ip, 'source': 'vps'})
+    except Exception as e:
+        # Логируем ошибку, но возвращаем понятный ответ
+        import logging
+        logging.warning(f"Не удалось получить внешний IP: {e}")
+        return jsonify({'ip': 'не удалось определить', 'source': 'vps', 'error': str(e)}), 200  # ✅ 200, чтобы не было 404/500
+    
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     """Страница регистрации."""
@@ -211,7 +224,7 @@ def admin_delete_user(user_id):
 def index():
     """Главная страница."""
     current_status = db.get_current_office_status()
-    desks = db.get_desks_status()  # ✅ Обязательно!
+    desks = db.get_desks_status()
     
     return render_template('index.html',
                          desks=desks,           # ✅ Для первичного рендера
