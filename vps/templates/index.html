@@ -30,7 +30,7 @@
     <!-- Сетка столов -->
     <main class="desks-grid">
         {% for desk in desks %}
-        <div class="desk {{ desk.status_class }}" id="desk-{{ desk.id }}">
+        <div class="desk {% if desk.is_present %}present{% else %}absent{% endif %}" id="desk-{{ desk.id }}">
             <div class="desk-top"></div>
             <div class="desk-name">{{ desk.name }}</div>
             <div class="desk-status">
