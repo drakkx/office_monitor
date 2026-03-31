@@ -211,11 +211,11 @@ def admin_delete_user(user_id):
 def index():
     """Главная страница."""
     current_status = db.get_current_office_status()
-    desks = db.get_desks_status()
+    desks = db.get_desks_status()  # ✅ Обязательно!
     
     return render_template('index.html',
-                         desks=desks,
-                         status=current_status,
+                         desks=desks,           # ✅ Для первичного рендера
+                         status={**current_status, 'desks': desks},  # ✅ Для JS
                          now=datetime.now())
 
 @app.route('/api/status')
