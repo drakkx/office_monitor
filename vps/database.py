@@ -5,22 +5,52 @@ from typing import List, Dict, Optional
 from pathlib import Path
 import json
 import os
+from werkzeug.security import generate_password_hash, check_password_hash
 
 DB_PATH = 'office_monitor.db'
 MACS_DUMP_PATH = '../shared/macs_dump.json'
 
 def get_connection():
-    """Создаёт подключение к БД."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 def init_database():
-    """Инициализирует таблицы БД."""
+    """Инициализирует все таблицы БД."""
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Таблица сканов от Raspberry Pi
+    # ===== ТАБЛИЦА ПОЛЬЗОВАТЕЛЕЙ =====
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            last_login TEXT,
+            login_attempts INTEGER DEFAULT 0,
+            locked_until TEXT
+        )
+    ''')
+    
+    # ===== ТАБЛИЦА СЕССИЙ =====
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            session_token TEXT UNIQUE NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
+    
+    # ===== ТАБЛИЦА СКанов (существующая) =====
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,11 +61,11 @@ def init_database():
         )
     ''')
     
-    # Таблица событий (приход/уход)
+    # ===== ТАБЛИЦА СОБЫТИЙ (существующая) =====
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type TEXT NOT NULL,  -- arrival, departure, empty, busy
+            event_type TEXT NOT NULL,
             person_name TEXT,
             mac_address TEXT,
             timestamp TEXT NOT NULL,
@@ -43,7 +73,7 @@ def init_database():
         )
     ''')
     
-    # Таблица последнего состояния
+    # ===== ТАБЛИЦА ПОСЛЕДНЕГО СОСТОЯНИЯ (существующая) =====
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS last_state (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -53,9 +83,242 @@ def init_database():
         )
     ''')
     
+    # ===== Создаём админа по умолчанию =====
+    cursor.execute('SELECT COUNT(*) FROM users')
+    if cursor.fetchone()[0] == 0:
+        admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
+        cursor.execute('''
+            INSERT INTO users (username, email, password_hash, is_admin, is_active)
+            VALUES (?, ?, ?, ?, ?)
+        ''', ('admin', 'admin@officestatus.ru', 
+              generate_password_hash(admin_password), 1, 1))
+        print("✅ Создан пользователь admin (смените пароль!)")
+    
     conn.commit()
     conn.close()
     print("✅ База данных инициализирована")
+
+# ============================================================
+# Функции управления пользователями
+# ============================================================
+
+def create_user(username: str, email: str, password: str, is_admin: bool = False) -> Dict:
+    """Создаёт нового пользователя."""
+    from auth import validate_username, validate_email, validate_password
+    
+    # Валидация
+    errors = []
+    if not validate_username(username):
+        errors.append('Неверный формат имени (3-30 символов, буквы, цифры, _ )')
+    if not validate_email(email):
+        errors.append('Неверный формат email')
+    password_errors = validate_password(password)
+    errors.extend(password_errors)
+    
+    if errors:
+        return {'success': False, 'errors': errors}
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        password_hash = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+        cursor.execute('''
+            INSERT INTO users (username, email, password_hash, is_admin, is_active)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (username, email.lower(), password_hash, 1 if is_admin else 0, 1))
+        conn.commit()
+        
+        user_id = cursor.lastrowid
+        return {'success': True, 'user_id': user_id}
+    
+    except sqlite3.IntegrityError as e:
+        if 'username' in str(e):
+            return {'success': False, 'errors': ['Пользователь с таким именем уже существует']}
+        elif 'email' in str(e):
+            return {'success': False, 'errors': ['Email уже зарегистрирован']}
+        return {'success': False, 'errors': ['Ошибка при создании пользователя']}
+    finally:
+        conn.close()
+
+def get_user_by_username(username: str) -> Optional[Dict]:
+    """Получает пользователя по имени."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE username = ?', (username,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def get_user_by_id(user_id: int) -> Optional[Dict]:
+    """Получает пользователя по ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def verify_password(username: str, password: str) -> Optional[Dict]:
+    """Проверяет пароль и возвращает пользователя если успешно."""
+    user = get_user_by_username(username)
+    if not user:
+        return None
+    
+    # Проверка блокировки
+    if user['locked_until']:
+        locked_until = datetime.fromisoformat(user['locked_until'])
+        if datetime.now() < locked_until:
+            return None  # Аккаунт заблокирован
+        else:
+            # Сброс блокировки
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET locked_until = NULL, login_attempts = 0 WHERE id = ?', (user['id'],))
+            conn.commit()
+            conn.close()
+            user = get_user_by_username(username)
+    
+    if check_password_hash(user['password_hash'], password):
+        # Успешный вход — сброс попыток
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE users 
+            SET login_attempts = 0, locked_until = NULL, last_login = ?
+            WHERE id = ?
+        ''', (datetime.now().isoformat(), user['id']))
+        conn.commit()
+        conn.close()
+        
+        return user
+    else:
+        # Неудачная попытка
+        conn = get_connection()
+        cursor = conn.cursor()
+        new_attempts = user['login_attempts'] + 1
+        
+        if new_attempts >= 5:
+            # Блокировка на 15 минут
+            locked_until = (datetime.now() + timedelta(minutes=15)).isoformat()
+            cursor.execute('''
+                UPDATE users 
+                SET login_attempts = ?, locked_until = ?
+                WHERE id = ?
+            ''', (new_attempts, locked_until, user['id']))
+        else:
+            cursor.execute('''
+                UPDATE users 
+                SET login_attempts = ?
+                WHERE id = ?
+            ''', (new_attempts, user['id']))
+        
+        conn.commit()
+        conn.close()
+        return None
+
+def get_all_users() -> List[Dict]:
+    """Получает всех пользователей (для админки)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, username, email, is_admin, is_active, created_at, last_login FROM users ORDER BY id')
+    users = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return users
+
+def delete_user(user_id: int) -> bool:
+    """Удаляет пользователя (кроме последнего админа)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Проверка: не последний ли админ
+    cursor.execute('SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?', (user_id,))
+    if cursor.fetchone()[0] == 0:
+        conn.close()
+        return False  # Нельзя удалить последнего админа
+    
+    cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+def toggle_user_status(user_id: int, is_active: bool) -> bool:
+    """Активирует/деактивирует пользователя."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET is_active = ? WHERE id = ?', (1 if is_active else 0, user_id))
+    conn.commit()
+    conn.close()
+    return True
+
+def update_user_password(user_id: int, new_password: str) -> Dict:
+    """Обновляет пароль пользователя."""
+    from auth import validate_password
+    
+    errors = validate_password(new_password)
+    if errors:
+        return {'success': False, 'errors': errors}
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    password_hash = generate_password_hash(new_password, method='pbkdf2:sha256', salt_length=16)
+    cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash, user_id))
+    conn.commit()
+    conn.close()
+    
+    return {'success': True}
+
+# ============================================================
+# Функции сессий
+# ============================================================
+
+def create_session(user_id: int, ip_address: str, user_agent: str) -> str:
+    """Создаёт новую сессию и возвращает токен."""
+    import secrets
+    
+    session_token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now() + timedelta(days=7)).isoformat()
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO sessions (user_id, session_token, expires_at, ip_address, user_agent)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (user_id, session_token, expires_at, ip_address, user_agent))
+    conn.commit()
+    conn.close()
+    
+    return session_token
+
+def get_session_by_token(session_token: str) -> Optional[Dict]:
+    """Получает сессию по токену."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT s.*, u.username, u.is_admin 
+        FROM sessions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.session_token = ? AND s.expires_at > ?
+    ''', (session_token, datetime.now().isoformat()))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def delete_session(session_token: str):
+    """Удаляет сессию (logout)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM sessions WHERE session_token = ?', (session_token,))
+    conn.commit()
+    conn.close()
+
+def cleanup_expired_sessions():
+    """Удаляет просроченные сессии."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM sessions WHERE expires_at < ?', (datetime.now().isoformat(),))
+    conn.commit()
+    conn.close()
 
 def save_scan_result(scanner_id: str, macs: List[str], timestamp: str):
     """Сохраняет результат сканирования от Raspberry Pi."""
