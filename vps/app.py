@@ -220,9 +220,15 @@ def index():
 
 @app.route('/api/status')
 def api_status():
-    """API для AJAX-обновления."""
-    return jsonify(db.get_current_office_status())
-
+    """API для AJAX-обновления страницы."""
+    current_status = db.get_current_office_status()
+    desks = db.get_desks_status()  # ✅ Получаем статус столов
+    
+    return jsonify({
+        **current_status,  # Распаковываем все поля статуса
+        'desks': desks,    # ✅ Добавляем столы
+        'timestamp': datetime.now().isoformat()
+    })
 # ============================================================
 # API для Raspberry Pi
 # ============================================================

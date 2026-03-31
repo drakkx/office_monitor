@@ -13,47 +13,88 @@ function updateTime() {
 async function updateStatus() {
     try {
         const response = await fetch('/api/status');
+        
+        // Проверка успешности запроса
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         
-        // Обновляем столы
-        data.desks.forEach(desk => {
-            const element = document.getElementById(`desk-${desk.id}`);
-            if (element) {
-                element.className = `desk ${desk.is_present ? 'present' : 'absent'}`;
-                element.querySelector('.desk-status').textContent = 
-                    desk.is_present ? '✓ В офисе' : '○ Нет на месте';
-            }
-        });
+        // ✅ Проверка: существует ли data.desks
+        if (data.desks && Array.isArray(data.desks)) {
+            // Обновляем столы
+            data.desks.forEach(desk => {
+                const element = document.getElementById(`desk-${desk.id}`);
+                if (element) {
+                    element.className = `desk ${desk.is_present ? 'present' : 'absent'}`;
+                    
+                    const statusEl = element.querySelector('.desk-status');
+                    if (statusEl) {
+                        statusEl.textContent = desk.is_present 
+                            ? '✓ В офисе' 
+                            : '○ Нет на месте';
+                    }
+                }
+            });
+        } else {
+            console.warn('⚠️ data.desks отсутствует или не является массивом');
+        }
         
         // Обновляем статистику
-        document.getElementById('present-count').textContent = data.present_count;
+        const presentCountEl = document.getElementById('present-count');
+        if (presentCountEl && data.present_count !== undefined) {
+            presentCountEl.textContent = data.present_count;
+        }
         
         // Гости
         const guestsSection = document.getElementById('guests-section');
-        if (data.guests_count > 0) {
-            guestsSection.innerHTML = `| Гости: ${data.guests_count}`;
-            guestsSection.style.display = 'inline';
-        } else {
-            guestsSection.style.display = 'none';
+        if (guestsSection && data.guests_count !== undefined) {
+            if (data.guests_count > 0) {
+                guestsSection.innerHTML = `| Гости: ${data.guests_count}`;
+                guestsSection.style.display = 'inline';
+            } else {
+                guestsSection.style.display = 'none';
+            }
         }
         
         // Последний визит
         const lastVisitSection = document.getElementById('last-visit-section');
-        if (data.is_empty) {
-            lastVisitSection.style.display = 'block';
-            if (data.last_visit) {
-                lastVisitSection.querySelector('strong').textContent = data.last_visit;
+        if (lastVisitSection && data.is_empty !== undefined) {
+            if (data.is_empty) {
+                lastVisitSection.style.display = 'block';
+                if (data.last_visit) {
+                    const strongEl = lastVisitSection.querySelector('strong');
+                    if (strongEl) strongEl.textContent = data.last_visit;
+                }
+            } else {
+                lastVisitSection.style.display = 'none';
             }
-        } else {
-            lastVisitSection.style.display = 'none';
         }
         
-        // Время в футере
-        const timeEl = document.querySelector('.auto-update strong');
-        if (timeEl) timeEl.textContent = '30 сек';
+        // Время обновления
+        console.log(`✅ Статус обновлён: ${new Date().toLocaleTimeString()}`);
         
     } catch (error) {
-        console.error('Ошибка обновления статуса:', error);
+        console.error('❌ Ошибка обновления статуса:', error);
+        
+        // Визуальное уведомление об ошибке
+        const errorToast = document.createElement('div');
+        errorToast.className = 'toast toast-error';
+        errorToast.innerHTML = `
+            <span>⚠️ Не удалось обновить статус</span>
+            <button onclick="this.parentElement.remove()">×</button>
+        `;
+        
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+        }
+        container.appendChild(errorToast);
+        
+        setTimeout(() => errorToast.remove(), 5000);
     }
 }
 
