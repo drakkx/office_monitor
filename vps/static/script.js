@@ -118,13 +118,18 @@ async function updateStatus() {
     }
 }
 
-// 🆕 Обновление статистики
 function updateStats(data) {
-    // Количество присутствующих
+    // 🆕 Обновляем количество присутствующих (только число)
     const presentEl = document.getElementById('present-count');
-    if (presentEl) {
+    if (presentEl && data.present_count !== undefined) {
+        presentEl.textContent = data.present_count;
+    }
+    
+    // 🆕 Обновляем общее количество столов
+    const totalEl = document.getElementById('total-desks');
+    if (totalEl) {
         const total = data.total_desks || getDesksCount();
-        presentEl.textContent = `${data.present_count || 0} / ${total}`;
+        totalEl.textContent = total;
     }
     
     // Гости
