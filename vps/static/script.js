@@ -165,6 +165,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('📄 DOM загружен, столов:', getDesksCount());
     
     updateTime();
+    setInterval(updateTime, 1000);
     
     if (typeof initNotifications === 'function') {
         initNotifications();
