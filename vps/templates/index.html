@@ -11,14 +11,14 @@
     <!-- Шапка -->
     <header class="office-header">
         <div class="datetime">
-            <span id="current-date">{{ now.strftime('%d.%m.%Y') }}</span>
-            <span id="current-time">{{ now.strftime('%H:%M:%S') }}</span>
+            <span id="current-date"></span>
+            <span id="current-time"></span>
         </div>
         <div class="stats">
             <span class="present-count" id="present-count-wrapper">
-    👥 В офисе: 
-    <strong id="present-count">{{ status.present|length }}</strong> 
-    / <span id="total-desks">{{ desks|length }}</span>
+                👥 В офисе: 
+                <strong id="present-count">{{ status.present|length }}</strong> 
+                / <span id="total-desks">{{ desks|length }}</span>
 </span>
             {% if status.guests_count > 0 %}
             <span class="guests-count">| Гости: {{ status.guests_count }}</span>
