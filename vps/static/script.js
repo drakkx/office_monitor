@@ -165,7 +165,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('📄 DOM загружен, столов:', getDesksCount());
     
     updateTime();
-    fetchExternalIP();
     
     if (typeof initNotifications === 'function') {
         initNotifications();
